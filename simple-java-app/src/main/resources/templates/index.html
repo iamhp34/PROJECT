@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8"/>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title th:text="${title}">Hi Hariprasad</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Segoe UI', sans-serif;
+            background: #0f172a;
+            color: #e2e8f0;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .card {
+            background: #1e293b;
+            border: 1px solid #334155;
+            border-radius: 16px;
+            padding: 48px 56px;
+            text-align: center;
+            max-width: 520px;
+            width: 90%;
+        }
+
+        .badge {
+            display: inline-block;
+            background: #7c3aed;
+            color: #ede9fe;
+            font-size: 12px;
+            font-weight: 700;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            padding: 5px 16px;
+            border-radius: 999px;
+            margin-bottom: 24px;
+        }
+
+        h1 {
+            font-size: 48px;
+            font-weight: 800;
+            color: #a78bfa;
+            margin-bottom: 12px;
+        }
+
+        .sub {
+            font-size: 16px;
+            color: #94a3b8;
+            margin-bottom: 36px;
+            line-height: 1.6;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-top: 8px;
+        }
+
+        .info-box {
+            background: #0f172a;
+            border: 1px solid #334155;
+            border-radius: 10px;
+            padding: 14px 16px;
+        }
+
+        .info-label {
+            font-size: 11px;
+            color: #64748b;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 4px;
+        }
+
+        .info-value {
+            font-size: 15px;
+            font-weight: 600;
+            color: #e2e8f0;
+        }
+
+        .dot {
+            display: inline-block;
+            width: 8px; height: 8px;
+            background: #22c55e;
+            border-radius: 50%;
+            margin-right: 6px;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50%       { opacity: 0.3; }
+        }
+    </style>
+</head>
+<body>
+<div class="card">
+    <div class="badge">Live</div>
+    <h1 th:text="${title}">Hi Hariprasad</h1>
+    <p class="sub" th:text="${message}">Running...</p>
+
+    <div class="info-grid">
+        <div class="info-box">
+            <div class="info-label">Server</div>
+            <div class="info-value" th:text="${server}">Undertow</div>
+        </div>
+        <div class="info-box">
+            <div class="info-label">Java Version</div>
+            <div class="info-value" th:text="${java}">17</div>
+        </div>
+        <div class="info-box" style="grid-column: span 2;">
+            <div class="info-label">Status</div>
+            <div class="info-value"><span class="dot"></span>Running</div>
+        </div>
+    </div>
+</div>
+</body>
+</html>
