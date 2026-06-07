@@ -2,138 +2,133 @@ pipeline {
     agent any
 
     parameters {
-        string(name: 'GIT_BRANCH',    defaultValue: 'main',
-               description: 'Branch to build')
-        string(name: 'GIT_REPO_URL',  defaultValue: 'https://github.com/iamhp34/simple-java-app.git',
-               description: 'GitHub repository URL')
-        string(name: 'DEPLOY_EC2_IP', defaultValue: '13.234.29.22',
-               description: 'Target EC2 IP for deployment')
+        string(name: 'GIT_BRANCH', defaultValue: 'main', description: 'Target Source Code Git Branch')
+        string(name: 'GIT_REPO_URL', defaultValue: 'https://github.com/iamhp34/PROJECT.git', description: 'Your GitHub Repository URL')
+        string(name: 'APP_DIRECTORY', defaultValue: 'sample-app', description: 'Java app source folder')
+
+        string(name: 'NEXUS_IP_PORT', defaultValue: '13.206.235.31:30001', description: 'Nexus Host IP and Port without http://')
+        string(name: 'NEXUS_REPOSITORY', defaultValue: 'HP-PROJECT', description: 'Nexus hosted repository name')
+        string(name: 'MAVEN_GROUP_ID', defaultValue: 'com/example', description: 'Maven group path')
+
+        string(name: 'DEPLOY_EC2_IP', defaultValue: '13.207.152.151', description: 'Target EC2 IP')
+        string(name: 'DEPLOY_EC2_USER', defaultValue: 'ec2-user', description: 'SSH username')
+        string(name: 'APP_DEPLOY_DIR', defaultValue: '/opt/sample-app', description: 'Deployment directory')
     }
 
     tools {
-        jdk   'jdk17'
+        jdk 'jdk17'
         maven 'maven3'
     }
 
     environment {
-        // ── Jenkins credential IDs ─────────────────────────────
         SONAR_SERVER_ENV = 'sonar-server'
         NEXUS_CREDS_ID   = 'nexus-creds'
         EC2_SSH_KEY_ID   = 'deploy-ssh-key'
-
-        // ── Nexus infra ────────────────────────────────────────
-        NEXUS_IP_PORT    = '172.31.7.200:8081'
-        NEXUS_REPOSITORY = 'maven-releases'
-        MAVEN_GROUP_ID   = 'com/hariprasad'
-
-        // ── EC2 deploy config ──────────────────────────────────
-        DEPLOY_EC2_USER  = 'ubuntu'
-        APP_DEPLOY_DIR   = '/opt/simple-java-app'
-        APP_PORT         = '8080'
-
-        // ── Derived artifact values ────────────────────────────
-        ARTIFACT_ID      = 'simple-java-app'
-        ARTIFACT_VERSION = '1.0.0'
-        JAR_FILE         = "simple-java-app-1.0.0.jar"
-        NEXUS_JAR_URL    = "http://${NEXUS_IP_PORT}/repository/${NEXUS_REPOSITORY}/${MAVEN_GROUP_ID}/simple-java-app/1.0.0/simple-java-app-1.0.0.jar"
     }
 
     stages {
-
-        // ── 1. CHECKOUT ────────────────────────────────────────
-        stage('Checkout') {
+        stage('Checkout Code') {
             steps {
-                echo "Stage 1 → Checkout: ${params.GIT_BRANCH}"
-                git branch: "${params.GIT_BRANCH}",
-                    url:    "${params.GIT_REPO_URL}"
+                echo "Stage 1: Fetching source code from branch: ${params.GIT_BRANCH}..."
+                git branch: "${params.GIT_BRANCH}", url: "${params.GIT_REPO_URL}"
             }
         }
 
-        // ── 2. SONARQUBE ANALYSIS ──────────────────────────────
         stage('SonarQube Analysis') {
             steps {
-                echo 'Stage 2 → Static code analysis...'
-                withSonarQubeEnv("${env.SONAR_SERVER_ENV}") {
-                    sh 'mvn sonar:sonar'
+                dir("${params.APP_DIRECTORY}") {
+                    echo "Stage 2: Running SonarQube analysis..."
+                    withSonarQubeEnv("${env.SONAR_SERVER_ENV}") {
+                        sh 'mvn sonar:sonar'
+                    }
                 }
+
                 timeout(time: 10, unit: 'MINUTES') {
+                    echo "Checking SonarQube Quality Gate..."
                     waitForQualityGate abortPipeline: true
                 }
             }
         }
 
-        // ── 3. BUILD JAR ───────────────────────────────────────
-        stage('Build JAR') {
+        stage('Build Stage') {
             steps {
-                echo 'Stage 3 → mvn clean package...'
-                sh 'mvn clean package -DskipTests=false'
-                // Confirm JAR was produced
-                sh "ls -lh target/${env.JAR_FILE}"
-                archiveArtifacts artifacts: "target/${env.JAR_FILE}", fingerprint: true
-            }
-        }
-
-        // ── 4. PUSH JAR TO NEXUS ───────────────────────────────
-        stage('Push to Nexus') {
-            steps {
-                withCredentials([usernamePassword(
-                    credentialsId: "${env.NEXUS_CREDS_ID}",
-                    usernameVariable: 'NEXUS_USER',
-                    passwordVariable: 'NEXUS_PASS'
-                )]) {
-                    echo 'Stage 4 → Uploading JAR to Nexus...'
-                    sh """
-                        curl -f -u \$NEXUS_USER:\$NEXUS_PASS \\
-                             --upload-file target/${env.JAR_FILE} \\
-                             "${env.NEXUS_JAR_URL}"
-                    """
-                    echo "✅ JAR uploaded → ${env.NEXUS_JAR_URL}"
+                dir("${params.APP_DIRECTORY}") {
+                    echo "Stage 3: Building JAR file..."
+                    sh 'mvn clean package -DskipTests'
                 }
             }
         }
 
-        // ── 5. PULL FROM NEXUS & RUN ON EC2 ───────────────────
-        stage('Deploy & Run on EC2') {
+        stage('Push to Nexus Repo') {
             steps {
-                sshagent(credentials: ["${env.EC2_SSH_KEY_ID}"]) {
-                    withCredentials([usernamePassword(
+                withCredentials([
+                    usernamePassword(
                         credentialsId: "${env.NEXUS_CREDS_ID}",
                         usernameVariable: 'NEXUS_USER',
                         passwordVariable: 'NEXUS_PASS'
-                    )]) {
-                        echo "Stage 5 → Deploying to ${params.DEPLOY_EC2_IP}..."
+                    )
+                ]) {
+                    script {
+                        echo "Stage 4: Uploading JAR file to Nexus..."
+                        def localJarPath = sh(
+                            script: "ls ${params.APP_DIRECTORY}/target/*.jar",
+                            returnStdout: true
+                        ).trim()
+
+                        def artifactName = "${JOB_NAME}"
+                        def artifactVersion = "${BUILD_NUMBER}"
+
                         sh """
-                            ssh -o StrictHostKeyChecking=no \\
-                                ${env.DEPLOY_EC2_USER}@${params.DEPLOY_EC2_IP} '
-
-                                echo "=== Setting up deploy directory ==="
-                                sudo mkdir -p ${env.APP_DEPLOY_DIR}
-                                sudo chown -R ${env.DEPLOY_EC2_USER}:${env.DEPLOY_EC2_USER} ${env.APP_DEPLOY_DIR}
-
-                                echo "=== Stopping existing app instance (if any) ==="
-                                pkill -f "${env.JAR_FILE}" 2>/dev/null && echo "Old instance stopped" || echo "No running instance found"
-                                sleep 2
-
-                                echo "=== Pulling JAR from Nexus ==="
-                                curl -f \\
-                                    -u ${NEXUS_USER}:${NEXUS_PASS} \\
-                                    -o ${env.APP_DEPLOY_DIR}/${env.JAR_FILE} \\
-                                    "${env.NEXUS_JAR_URL}"
-
-                                echo "=== Starting app (Undertow, no Tomcat) ==="
-                                nohup java -jar ${env.APP_DEPLOY_DIR}/${env.JAR_FILE} \\
-                                    --server.port=${env.APP_PORT} \\
-                                    > ${env.APP_DEPLOY_DIR}/app.log 2>&1 &
-
-                                echo "=== Waiting for startup ==="
-                                sleep 12
-
-                                echo "=== Health check ==="
-                                curl -sf http://localhost:${env.APP_PORT}/actuator/health \\
-                                    && echo "✅ App is UP!" \\
-                                    || (echo "❌ Health check failed" && tail -30 ${env.APP_DEPLOY_DIR}/app.log && exit 1)
-                            '
+                            curl -f \
+                            -u \$NEXUS_USER:\$NEXUS_PASS \
+                            --upload-file ${localJarPath} \
+                            "http://${params.NEXUS_IP_PORT}/repository/${params.NEXUS_REPOSITORY}/${params.MAVEN_GROUP_ID}/${artifactName}/${artifactVersion}/${artifactName}-${artifactVersion}.jar"
                         """
+                    }
+                }
+            }
+        }
+
+        stage('Deploy on EC2') {
+            steps {
+                sshagent(credentials: ["${env.EC2_SSH_KEY_ID}"]) {
+                    withCredentials([
+                        usernamePassword(
+                            credentialsId: "${env.NEXUS_CREDS_ID}",
+                            usernameVariable: 'NEXUS_USER',
+                            passwordVariable: 'NEXUS_PASS'
+                        )
+                    ]) {
+                        script {
+                            def artifactName = "${JOB_NAME}"
+                            def artifactVersion = "${BUILD_NUMBER}"
+                            // SWAPPED: Target target extension updated to .jar
+                            def artifactFile = "${artifactName}.jar"
+
+                            // SWAPPED: Source download path string modified to look up .jar
+                            def nexusDownloadUrl = "http://${params.NEXUS_IP_PORT}/repository/${params.NEXUS_REPOSITORY}/${params.MAVEN_GROUP_ID}/${artifactName}/${artifactVersion}/${artifactName}-${artifactVersion}.jar"
+
+                            echo "Stage 5: Deploying artifact on EC2..."
+
+                            sh """
+                                ssh -A -o StrictHostKeyChecking=no ${params.DEPLOY_EC2_USER}@${params.DEPLOY_EC2_IP} "
+                                    echo 'Connected to target EC2'
+                                    hostname
+
+                                    sudo mkdir -p ${params.APP_DEPLOY_DIR}
+                                    sudo chown -R ${params.DEPLOY_EC2_USER}:${params.DEPLOY_EC2_USER} ${params.APP_DEPLOY_DIR}
+
+                                    echo 'Downloading JAR from Nexus...'
+
+                                    curl -f \
+                                    -u '\$NEXUS_USER:\$NEXUS_PASS' \
+                                    -o ${params.APP_DEPLOY_DIR}/${artifactFile} \
+                                    '${nexusDownloadUrl}'
+
+                                    echo 'Deployment complete.'
+                                "
+                            """
+                        }
                     }
                 }
             }
@@ -141,19 +136,8 @@ pipeline {
     }
 
     post {
-        success {
-            echo """
-            ✅ PIPELINE SUCCEEDED
-            App URL  : http://${params.DEPLOY_EC2_IP}:${env.APP_PORT}/
-            Health   : http://${params.DEPLOY_EC2_IP}:${env.APP_PORT}/actuator/health
-            Nexus JAR: ${env.NEXUS_JAR_URL}
-            """
-        }
-        failure {
-            echo '❌ Pipeline FAILED — check stage logs above'
-        }
         always {
-            echo 'Wiping build workspace...'
+            echo "Wiping build workspace..."
             cleanWs()
         }
     }
