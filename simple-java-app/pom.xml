@@ -9,7 +9,6 @@
     <parent>
         <groupId>org.springframework.boot</groupId>
         <artifactId>spring-boot-starter-parent</artifactId>
-         <Jenkins-Build-Number>${buildNumber}</Jenkins-Build-Number>
         <version>3.2.4</version>
         <relativePath/>
     </parent>
