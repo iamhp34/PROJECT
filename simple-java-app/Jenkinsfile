@@ -7,7 +7,7 @@ pipeline {
         string(name: 'APP_DIRECTORY', defaultValue: 'simple-java-app', description: 'Java app source folder')
 
         string(name: 'NEXUS_IP_PORT', defaultValue: '13.206.235.31:30001', description: 'Nexus Host IP and Port without http://')
-        string(name: 'NEXUS_REPOSITORY', defaultValue: 'HP-PROJECT', description: 'Nexus hosted repository name')
+        string(name: 'NEXUS_REPOSITORY', defaultValue: 'maven-releases', description: 'Nexus hosted repository name')
         string(name: 'MAVEN_GROUP_ID', defaultValue: 'com/example', description: 'Maven group path')
 
         string(name: 'DEPLOY_EC2_IP', defaultValue: '13.207.152.151', description: 'Target EC2 IP')
