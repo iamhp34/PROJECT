@@ -27,6 +27,7 @@ pipeline {
     }
 
     stages {
+
         stage('Checkout Code') {
             steps {
                 echo "Stage 1: Fetching source code from branch: ${params.GIT_BRANCH}..."
@@ -34,27 +35,26 @@ pipeline {
             }
         }
 
+        stage('Build Stage') {
+            steps {
+                dir("${params.APP_DIRECTORY}") {
+                    echo "Stage 2: Building JAR file..."
+                    sh 'mvn clean package -DskipTests'
+                }
+            }
+        }
+
         stage('SonarQube Analysis') {
             steps {
                 dir("${params.APP_DIRECTORY}") {
-                    echo "Stage 2: Running SonarQube analysis..."
+                    echo "Stage 3: Running SonarQube analysis..."
                     withSonarQubeEnv("${env.SONAR_SERVER_ENV}") {
                         sh 'mvn sonar:sonar'
                     }
                 }
 
                 timeout(time: 10, unit: 'MINUTES') {
-                    echo "Checking SonarQube Quality Gate..."
                     waitForQualityGate abortPipeline: true
-                }
-            }
-        }
-
-        stage('Build Stage') {
-            steps {
-                dir("${params.APP_DIRECTORY}") {
-                    echo "Stage 3: Building JAR file..."
-                    sh 'mvn clean package -DskipTests'
                 }
             }
         }
@@ -70,6 +70,7 @@ pipeline {
                 ]) {
                     script {
                         echo "Stage 4: Uploading JAR file to Nexus..."
+
                         def localJarPath = sh(
                             script: "ls ${params.APP_DIRECTORY}/target/*.jar",
                             returnStdout: true
@@ -102,6 +103,7 @@ pipeline {
                         script {
                             def artifactName = "${JOB_NAME}"
                             def artifactVersion = "${BUILD_NUMBER}"
+
                             // SWAPPED: Target target extension updated to .jar
                             def artifactFile = "${artifactName}.jar"
 
