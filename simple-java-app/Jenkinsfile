@@ -104,10 +104,8 @@ pipeline {
                             def artifactName = "${JOB_NAME}"
                             def artifactVersion = "${BUILD_NUMBER}"
 
-                            // SWAPPED: Target target extension updated to .jar
                             def artifactFile = "${artifactName}.jar"
 
-                            // SWAPPED: Source download path string modified to look up .jar
                             def nexusDownloadUrl = "http://${params.NEXUS_IP_PORT}/repository/${params.NEXUS_REPOSITORY}/${params.MAVEN_GROUP_ID}/${artifactName}/${artifactVersion}/${artifactName}-${artifactVersion}.jar"
 
                             echo "Stage 5: Deploying artifact on EC2..."
