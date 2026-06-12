@@ -15,7 +15,7 @@
 
     <groupId>com.hariprasad</groupId>
     <artifactId>simple-java-app</artifactId>
-    <version>1.0.0</version>
+    <version>${revision}</version>
     <packaging>jar</packaging>
 
     <name>simple-java-app</name>
@@ -23,6 +23,7 @@
 
     <properties>
         <java.version>17</java.version>
+        <revision>1</revision>   <!-- ← default, overridden by Jenkins -Drevision=${BUILD_NUMBER} -->
     </properties>
 
     <dependencies>
@@ -51,7 +52,7 @@
             <artifactId>spring-boot-starter-thymeleaf</artifactId>
         </dependency>
 
-        <!-- Actuator — health endpoint for pipeline health check -->
+        <!-- Actuator - health endpoint for pipeline health check -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
@@ -68,6 +69,7 @@
 
     <build>
         <plugins>
+
             <!-- Produces executable fat-JAR -->
             <plugin>
                 <groupId>org.springframework.boot</groupId>
@@ -86,6 +88,7 @@
                     <target>17</target>
                 </configuration>
             </plugin>
+
         </plugins>
     </build>
 
