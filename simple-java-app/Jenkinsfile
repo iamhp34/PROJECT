@@ -52,7 +52,6 @@ pipeline {
                         sh 'mvn sonar:sonar'
                     }
                 }
-
                 timeout(time: 10, unit: 'MINUTES') {
                     waitForQualityGate abortPipeline: true
                 }
@@ -103,8 +102,8 @@ pipeline {
                         script {
                             def artifactName = "${JOB_NAME}"
                             def artifactVersion = "${BUILD_NUMBER}"
-
-                            def artifactFile = "${artifactName}.jar"
+                            
+                            def artifactFile = "${artifactName}-${artifactVersion}.jar"
 
                             def nexusDownloadUrl = "http://${params.NEXUS_IP_PORT}/repository/${params.NEXUS_REPOSITORY}/${params.MAVEN_GROUP_ID}/${artifactName}/${artifactVersion}/${artifactName}-${artifactVersion}.jar"
 
