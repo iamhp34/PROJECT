@@ -2,44 +2,62 @@ pipeline {
     agent any
 
     parameters {
-        string(name: 'GIT_BRANCH', defaultValue: 'main', description: 'Target Source Code Git Branch')
-        string(name: 'GIT_REPO_URL', defaultValue: 'https://github.com/iamhp34/PROJECT.git', description: 'Your GitHub Repository URL')
-        string(name: 'APP_DIRECTORY', defaultValue: 'simple-java-app', description: 'Java app source folder')
+        string(name: 'GIT_BRANCH',      defaultValue: 'main',
+               description: 'Source code branch')
+        string(name: 'GIT_REPO_URL',    defaultValue: 'https://github.com/iamhp34/PROJECT.git',
+               description: 'App source repo')
+        string(name: 'APP_DIRECTORY',   defaultValue: 'simple-java-app',
+               description: 'Java app folder')
 
-        string(name: 'NEXUS_IP_PORT', defaultValue: '13.206.235.31:30001', description: 'Nexus Host IP and Port without http://')
-        string(name: 'NEXUS_REPOSITORY', defaultValue: 'maven-releases', description: 'Nexus hosted repository name')
-        string(name: 'MAVEN_GROUP_ID', defaultValue: 'com/example', description: 'Maven group path')
+        string(name: 'SONAR_IP_PORT',   defaultValue: '13.233.106.75:30665',
+               description: 'SonarQube IP and Port without http://')
 
-        string(name: 'DEPLOY_EC2_IP', defaultValue: '13.207.152.151', description: 'Target EC2 IP')
-        string(name: 'DEPLOY_EC2_USER', defaultValue: 'ec2-user', description: 'SSH username')
-        string(name: 'APP_DEPLOY_DIR', defaultValue: '/opt/sample-app', description: 'Deployment directory')
+        string(name: 'NEXUS_IP_PORT',   defaultValue: '13.233.9.11:30001',
+               description: 'Nexus IP and Port without http://')
+        string(name: 'NEXUS_REPOSITORY',defaultValue: 'maven-releases',
+               description: 'Nexus hosted repository name')
+        string(name: 'MAVEN_GROUP_ID',  defaultValue: 'com/example',
+               description: 'Maven group path')
+
+        string(name: 'MANIFESTS_REPO',  defaultValue: 'https://github.com/iamhp34/hariprasad-k8s-manifests.git',
+               description: 'K8s manifests repo URL')
     }
 
     tools {
-        jdk 'jdk17'
+        jdk   'jdk17'
         maven 'maven3'
     }
 
     environment {
+
         SONAR_SERVER_ENV = 'sonar-server'
         NEXUS_CREDS_ID   = 'nexus-creds'
-        EC2_SSH_KEY_ID   = 'deploy-ssh-key'
+        GITHUB_CREDS     = 'github-creds'
+
+        AWS_REGION   = 'ap-south-1'
+        ECR_REGISTRY = '835505308472.dkr.ecr.ap-south-1.amazonaws.com'
+        ECR_REPO     = 'hariprasad-app'
+
+        IMAGE_TAG    = "${BUILD_NUMBER}"
+        FULL_IMAGE   = "835505308472.dkr.ecr.ap-south-1.amazonaws.com/hariprasad-app:${BUILD_NUMBER}"
     }
 
     stages {
 
         stage('Checkout Code') {
             steps {
-                echo "Stage 1: Fetching source code from branch: ${params.GIT_BRANCH}..."
-                git branch: "${params.GIT_BRANCH}", url: "${params.GIT_REPO_URL}"
+                echo "Stage 1: Fetching source from branch: ${params.GIT_BRANCH}..."
+                git branch: "${params.GIT_BRANCH}",
+                    url:    "${params.GIT_REPO_URL}"
             }
         }
 
-        stage('Build Stage') {
+        stage('Build JAR') {
             steps {
                 dir("${params.APP_DIRECTORY}") {
-                    echo "Stage 2: Building JAR file..."
+                    echo "Stage 2: Building JAR..."
                     sh 'mvn clean package -DskipTests'
+                    sh "ls -lh target/*.jar"
                 }
             }
         }
@@ -49,7 +67,10 @@ pipeline {
                 dir("${params.APP_DIRECTORY}") {
                     echo "Stage 3: Running SonarQube analysis..."
                     withSonarQubeEnv("${env.SONAR_SERVER_ENV}") {
-                        sh 'mvn sonar:sonar'
+                        sh """
+                            mvn sonar:sonar \
+                                -Dsonar.host.url=http://${params.SONAR_IP_PORT}
+                        """
                     }
                 }
                 timeout(time: 10, unit: 'MINUTES') {
@@ -58,85 +79,119 @@ pipeline {
             }
         }
 
-        stage('Push to Nexus Repo') {
+        stage('Push to Nexus') {
             steps {
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: "${env.NEXUS_CREDS_ID}",
-                        usernameVariable: 'NEXUS_USER',
-                        passwordVariable: 'NEXUS_PASS'
-                    )
-                ]) {
+                withCredentials([usernamePassword(
+                    credentialsId: "${env.NEXUS_CREDS_ID}",
+                    usernameVariable: 'NEXUS_USER',
+                    passwordVariable: 'NEXUS_PASS'
+                )]) {
                     script {
-                        echo "Stage 4: Uploading JAR file to Nexus..."
-
+                        echo "Stage 4: Uploading JAR to Nexus..."
                         def localJarPath = sh(
-                            script: "ls ${params.APP_DIRECTORY}/target/*.jar",
+                            script: "ls ${params.APP_DIRECTORY}/target/*.jar | grep -v original",
                             returnStdout: true
                         ).trim()
-
-                        def artifactName = "${JOB_NAME}"
+                        def artifactName    = "${JOB_NAME}"
                         def artifactVersion = "${BUILD_NUMBER}"
-
                         sh """
                             curl -f \
-                            -u \$NEXUS_USER:\$NEXUS_PASS \
-                            --upload-file ${localJarPath} \
-                            "http://${params.NEXUS_IP_PORT}/repository/${params.NEXUS_REPOSITORY}/${params.MAVEN_GROUP_ID}/${artifactName}/${artifactVersion}/${artifactName}-${artifactVersion}.jar"
+                                -u \$NEXUS_USER:\$NEXUS_PASS \
+                                --upload-file ${localJarPath} \
+                                "http://${params.NEXUS_IP_PORT}/repository/${params.NEXUS_REPOSITORY}/${params.MAVEN_GROUP_ID}/${artifactName}/${artifactVersion}/${artifactName}-${artifactVersion}.jar"
                         """
+                        echo " JAR pushed → Nexus build ${artifactVersion}"
                     }
                 }
             }
         }
 
-        stage('Deploy on EC2') {
+        stage('Docker Build') {
             steps {
-                sshagent(credentials: ["${env.EC2_SSH_KEY_ID}"]) {
-                    withCredentials([
-                        usernamePassword(
-                            credentialsId: "${env.NEXUS_CREDS_ID}",
-                            usernameVariable: 'NEXUS_USER',
-                            passwordVariable: 'NEXUS_PASS'
-                        )
-                    ]) {
-                        script {
-                            def artifactName = "${JOB_NAME}"
-                            def artifactVersion = "${BUILD_NUMBER}"
-                            
-                            def artifactFile = "${artifactName}-${artifactVersion}.jar"
-
-                            def nexusDownloadUrl = "http://${params.NEXUS_IP_PORT}/repository/${params.NEXUS_REPOSITORY}/${params.MAVEN_GROUP_ID}/${artifactName}/${artifactVersion}/${artifactName}-${artifactVersion}.jar"
-
-                            echo "Stage 5: Deploying artifact on EC2..."
-
-                            sh """
-                                ssh -A -o StrictHostKeyChecking=no ${params.DEPLOY_EC2_USER}@${params.DEPLOY_EC2_IP} "
-                                    echo 'Connected to target EC2'
-                                    hostname
-
-                                    sudo mkdir -p ${params.APP_DEPLOY_DIR}
-                                    sudo chown -R ${params.DEPLOY_EC2_USER}:${params.DEPLOY_EC2_USER} ${params.APP_DEPLOY_DIR}
-
-                                    echo 'Downloading JAR from Nexus...'
-
-                                    curl -f \
-                                    -u '\$NEXUS_USER:\$NEXUS_PASS' \
-                                    -o ${params.APP_DEPLOY_DIR}/${artifactFile} \
-                                    '${nexusDownloadUrl}'
-
-                                    echo 'Deployment complete.'
-                                "
-                            """
-                        }
-                    }
+                dir("${params.APP_DIRECTORY}") {
+                    echo "Stage 5: Building Docker image..."
+                    sh """
+                        docker build \
+                            --build-arg BUILD_NUMBER=${BUILD_NUMBER} \
+                            -t ${env.FULL_IMAGE} \
+                            -t ${env.ECR_REGISTRY}/${env.ECR_REPO}:latest \
+                            .
+                    """
                 }
+                echo " Image built: ${env.FULL_IMAGE}"
+            }
+        }
+
+        stage('Push to ECR') {
+            steps {
+                echo "Stage 6: Pushing image to ECR..."
+                sh """
+                    aws ecr get-login-password --region ${env.AWS_REGION} | \
+                        docker login \
+                            --username AWS \
+                            --password-stdin ${env.ECR_REGISTRY}
+
+                    # Push versioned tag  ← hariprasad-app:15
+                    docker push ${env.FULL_IMAGE}
+
+                    # Push latest tag
+                    docker push ${env.ECR_REGISTRY}/${env.ECR_REPO}:latest
+
+                    # Cleanup local images
+                    docker rmi ${env.FULL_IMAGE} || true
+                    docker rmi ${env.ECR_REGISTRY}/${env.ECR_REPO}:latest || true
+                """
+                echo " Pushed to ECR: ${env.FULL_IMAGE}"
+            }
+        }
+
+        stage('Update Helm Values') {
+            steps {
+                withCredentials([usernamePassword(
+                    credentialsId: "${env.GITHUB_CREDS}",
+                    usernameVariable: 'GIT_USER',
+                    passwordVariable: 'GIT_TOKEN'
+                )]) {
+                    sh """
+                        # Clone manifests repo
+                        git clone https://\$GIT_USER:\$GIT_TOKEN@github.com/iamhp34/hariprasad-k8s-manifests.git
+                        cd hariprasad-k8s-manifests
+
+                        # Update image tag to current build number
+                        sed -i 's|tag:.*|tag: "${BUILD_NUMBER}"|' hariprasad-chart/values.yaml
+
+                        echo "Updated values.yaml:"
+                        cat hariprasad-chart/values.yaml
+
+                        # Commit and push → ArgoCD auto detects
+                        git config user.email "jenkins@ci.com"
+                        git config user.name "Jenkins CI"
+                        git add hariprasad-chart/values.yaml
+                        git commit -m "ci: update image tag to build-${BUILD_NUMBER}"
+                        git push origin main
+                    """
+                }
+                echo " Helm values updated → ArgoCD deploying build ${BUILD_NUMBER}"
             }
         }
     }
 
     post {
+        success {
+            echo """
+            ╔══════════════════════════════════════════════════╗
+            ║  CI PIPELINE SUCCEEDED                        
+            ║  Build    : ${BUILD_NUMBER}                      ║
+            ║  JAR      : Nexus build-${BUILD_NUMBER}          ║
+            ║  Image    : ${env.FULL_IMAGE}                    ║
+            ║  ArgoCD   : deploying automatically              ║
+            ╚══════════════════════════════════════════════════╝
+            """
+        }
+        failure {
+            echo ' Pipeline FAILED — check stage logs above'
+        }
         always {
-            echo "Wiping build workspace..."
             cleanWs()
         }
     }
