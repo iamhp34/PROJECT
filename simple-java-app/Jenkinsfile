@@ -113,8 +113,7 @@ pipeline {
             steps {
                 dir("${params.APP_DIRECTORY}") {
                     echo "Stage 5: Building Docker image..."
-                    sh 'apt-get update -qq && apt-get install -y -qq docker.io awscli'
-
+                    sh 'sudo dnf install -y -q docker aws-cli'
                     script {
                         def dockerToolHome = tool name: 'latest', type: 'org.jenkinsci.plugins.docker.commons.tools.DockerTool'
 
