@@ -1,5 +1,25 @@
 pipeline {
-    agent any
+    agent {
+        kubernetes {
+            yaml """
+apiVersion: v1
+kind: Pod
+spec:
+  imagePullSecrets:
+  - name: ecr-pull-secret
+  containers:
+  - name: jnlp
+    image: 835505308472.dkr.ecr.ap-south-1.amazonaws.com/jenkins-agent-custom:latest
+    volumeMounts:
+    - name: docker-sock
+      mountPath: /var/run/docker.sock
+  volumes:
+  - name: docker-sock
+    hostPath:
+      path: /var/run/docker.sock
+"""
+        }
+    }
 
     parameters {
         string(name: 'GIT_BRANCH', defaultValue: 'main',
@@ -113,12 +133,14 @@ pipeline {
             steps {
                 dir("${params.APP_DIRECTORY}") {
                     echo "Stage 5: Building Docker image..."
+
                     sh '''
-                            dnf install -y -q docker
-                            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o awscliv2.zip
-                            unzip -q awscliv2.zip
-                            ./aws/install --update
+                        dnf install -y -q docker
+                        curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o awscliv2.zip
+                        unzip -q awscliv2.zip
+                        ./aws/install --update
                     '''
+
                     script {
                         def dockerToolHome = tool name: 'latest', type: 'org.jenkinsci.plugins.docker.commons.tools.DockerTool'
 
@@ -199,7 +221,7 @@ pipeline {
         success {
             echo """
             ╔══════════════════════════════════════════════════╗
-            ║  CI PIPELINE SUCCEEDED                           ║
+            ║  CI PIPELINE SUCCEEDED                          ║
             ║  Build    : ${BUILD_NUMBER}                      ║
             ║  JAR      : Nexus build-${BUILD_NUMBER}          ║
             ║  Image    : ${env.FULL_IMAGE}                    ║
