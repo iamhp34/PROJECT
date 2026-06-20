@@ -1,36 +1,7 @@
 pipeline {
     agent {
         kubernetes {
-            yaml """
-apiVersion: v1
-kind: Pod
-spec:
-  imagePullSecrets:
-  - name: ecr-pull-secret
-  containers:
-  - name: jnlp
-    image: 835505308472.dkr.ecr.ap-south-1.amazonaws.com/jenkins-agent-custom:latest
-    env:
-    - name: AWS_ACCESS_KEY_ID
-      valueFrom:
-        secretKeyRef:
-          name: aws-credentials
-          key: AWS_ACCESS_KEY_ID
-    - name: AWS_SECRET_ACCESS_KEY
-      valueFrom:
-        secretKeyRef:
-          name: aws-credentials
-          key: AWS_SECRET_ACCESS_KEY
-    - name: AWS_DEFAULT_REGION
-      value: "ap-south-1"
-    volumeMounts:
-    - name: docker-sock
-      mountPath: /var/run/docker.sock
-  volumes:
-  - name: docker-sock
-    hostPath:
-      path: /var/run/docker.sock
-"""
+            label 'jenkins-agent-custom'
         }
     }
     parameters {
