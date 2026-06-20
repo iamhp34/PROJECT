@@ -104,20 +104,16 @@ pipeline {
             steps {
                 dir("${params.APP_DIRECTORY}") {
                     echo "Stage 5: Building Docker image..."
-                    sh """
-                        # Download a lightweight client binary if not present inside the pod environment
-                        if ! command -v docker &> /dev/null; then
-                            echo "Installing Docker CLI..."
-                            curl -fsSL https://docker.com | tar -xz --strip-components=1 -C /tmp
-                            export PATH="\$PATH:/tmp"
-                        fi
-
-                        docker build \
-                            --build-arg BUILD_NUMBER=${BUILD_NUMBER} \
-                            -t ${env.FULL_IMAGE} \
-                            -t ${env.ECR_REGISTRY}/${env.ECR_REPO}:latest \
-                            .
-                    """
+                    // Dynamically binds your configured "latest" UI tool binary to this block
+                    withEnv(["PATH+DOCKER=${tool name: 'latest', type: 'org.jenkinsci.plugins.docker.commons.tools.DockerTool'}/bin"]) {
+                        sh """
+                            docker build \
+                                --build-arg BUILD_NUMBER=${BUILD_NUMBER} \
+                                -t ${env.FULL_IMAGE} \
+                                -t ${env.ECR_REGISTRY}/${env.ECR_REPO}:latest \
+                                .
+                        """
+                    }
                 }
                 echo " Image built: ${env.FULL_IMAGE}"
             }
@@ -126,22 +122,23 @@ pipeline {
         stage('Push to ECR') {
             steps {
                 echo "Stage 6: Pushing image to ECR..."
-                sh """
-                    if ! command -v docker &> /dev/null; then
-                        export PATH="\$PATH:/tmp"
-                    fi
+                // Dynamically binds your configured "latest" UI tool binary to this block
+                withEnv(["PATH+DOCKER=${tool name: 'latest', type: 'org.jenkinsci.plugins.docker.commons.tools.DockerTool'}/bin"]) {
+                    sh """
+                        # Authenticate against ECR using your host worker node's engine socket
+                        aws ecr get-login-password --region ${env.AWS_REGION} | \
+                            docker login \
+                                --username AWS \
+                                --password-stdin ${env.ECR_REGISTRY}
 
-                    aws ecr get-login-password --region ${env.AWS_REGION} | \
-                        docker login \
-                            --username AWS \
-                            --password-stdin ${env.ECR_REGISTRY}
+                        docker push ${env.FULL_IMAGE}
+                        docker push ${env.ECR_REGISTRY}/${env.ECR_REPO}:latest
 
-                    docker push ${env.FULL_IMAGE}
-                    docker push ${env.ECR_REGISTRY}/${env.ECR_REPO}:latest
-
-                    docker rmi ${env.FULL_IMAGE} || true
-                    docker rmi ${env.ECR_REGISTRY}/${env.ECR_REPO}:latest || true
-                """
+                        # Clean up local cache layers to save storage space on worker node
+                        docker rmi ${env.FULL_IMAGE} || true
+                        docker rmi ${env.ECR_REGISTRY}/${env.ECR_REPO}:latest || true
+                    """
+                }
                 echo " Pushed to ECR: ${env.FULL_IMAGE}"
             }
         }
