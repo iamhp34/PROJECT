@@ -4,7 +4,7 @@ pipeline {
     parameters {
         string(name: 'GIT_BRANCH',      defaultValue: 'main',
                description: 'Source code branch')
-        string(name: 'GIT_REPO_URL',    defaultValue: 'https://github.com',
+        string(name: 'GIT_REPO_URL',    defaultValue: 'https://github.com/iamhp34/PROJECT.git',
                description: 'App source repo')
         string(name: 'APP_DIRECTORY',   defaultValue: 'simple-java-app',
                description: 'Java app folder')
@@ -24,9 +24,9 @@ pipeline {
     }
 
     tools {
-        jdk    'jdk17'
-        maven  'maven3'
-        docker 'docker' // Pulls the Docker CLI binary configured in your Jenkins UI
+        jdk        'jdk17'
+        maven      'maven3'
+        dockerTool 'docker' // Fixed: Uses the correct tool type declaration
     }
 
     environment {
@@ -105,8 +105,8 @@ pipeline {
             steps {
                 dir("${params.APP_DIRECTORY}") {
                     echo "Stage 5: Building Docker image..."
-                    // withEnv ensures the Docker tool path is injected into the execution context shell
-                    withEnv(["PATH+DOCKER=${tool 'docker'}/bin"]) {
+                    // Injected using the correct tool name format
+                    withEnv(["PATH+DOCKER=${tool name: 'docker', type: 'org.jenkinsci.plugins.docker.commons.tools.DockerTool'}/bin"]) {
                         sh """
                             docker build \
                                 --build-arg BUILD_NUMBER=${BUILD_NUMBER} \
@@ -123,9 +123,8 @@ pipeline {
         stage('Push to ECR') {
             steps {
                 echo "Stage 6: Pushing image to ECR..."
-                withEnv(["PATH+DOCKER=${tool 'docker'}/bin"]) {
+                withEnv(["PATH+DOCKER=${tool name: 'docker', type: 'org.jenkinsci.plugins.docker.commons.tools.DockerTool'}/bin"]) {
                     sh """
-                        # Log in to AWS ECR using the host's background Docker engine
                         aws ecr get-login-password --region ${env.AWS_REGION} | \
                             docker login \
                                 --username AWS \
