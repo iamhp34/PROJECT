@@ -200,9 +200,7 @@ pipeline {
                         rm -rf hariprasad-k8s-manifests
                         git clone https://\$GIT_USER:\$GIT_TOKEN@://github.com
                         cd hariprasad-k8s-manifests
-
-                        sed -i 's|tag:.*|tag: "${BUILD_NUMBER}"|' hariprasad-chart/values.yaml
-
+                        sed -i 's|tag:.*|tag: "${BUILD_NUMBER}"|' values.yaml
                         echo "Updated values.yaml:"
                         cat hariprasad-chart/values.yaml
 
