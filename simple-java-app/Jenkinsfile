@@ -4,54 +4,16 @@ pipeline {
             label 'jenkins-agent-custom'
         }
     }
+
     parameters {
-        string(
-            name: 'GIT_BRANCH',
-            defaultValue: 'main',
-            description: 'Source code branch'
-        )
-
-        string(
-            name: 'GIT_REPO_URL',
-            defaultValue: 'https://github.com/iamhp34/PROJECT.git',
-            description: 'App source repo'
-        )
-
-        string(
-            name: 'APP_DIRECTORY',
-            defaultValue: 'simple-java-app',
-            description: 'Java app folder'
-        )
-
-        string(
-            name: 'SONAR_IP_PORT',
-            defaultValue: '13.233.106.75:30665',
-            description: 'SonarQube IP and Port without http://'
-        )
-
-        string(
-            name: 'NEXUS_IP_PORT',
-            defaultValue: '13.233.9.11:30001',
-            description: 'Nexus IP and Port without http://'
-        )
-
-        string(
-            name: 'NEXUS_REPOSITORY',
-            defaultValue: 'maven-releases',
-            description: 'Nexus hosted repository name'
-        )
-
-        string(
-            name: 'MAVEN_GROUP_ID',
-            defaultValue: 'com/example',
-            description: 'Maven group path'
-        )
-
-        string(
-            name: 'MANIFESTS_REPO',
-            defaultValue: 'https://github.com/iamhp34/hariprasad-k8s-manifests.git',
-            description: 'K8s manifests repo URL'
-        )
+        string(name: 'GIT_BRANCH', defaultValue: 'main', description: 'Source code branch')
+        string(name: 'GIT_REPO_URL', defaultValue: 'https://github.com/iamhp34/PROJECT.git', description: 'App source repo')
+        string(name: 'APP_DIRECTORY', defaultValue: 'simple-java-app', description: 'Java app folder')
+        string(name: 'SONAR_IP_PORT', defaultValue: '13.233.106.75:30665', description: 'SonarQube IP and Port without http://')
+        string(name: 'NEXUS_IP_PORT', defaultValue: '13.233.9.11:30001', description: 'Nexus IP and Port without http://')
+        string(name: 'NEXUS_REPOSITORY', defaultValue: 'maven-releases', description: 'Nexus hosted repository name')
+        string(name: 'MAVEN_GROUP_ID', defaultValue: 'com/example', description: 'Maven group path')
+        string(name: 'MANIFESTS_REPO', defaultValue: 'https://github.com/iamhp34/hariprasad-k8s-manifests.git', description: 'K8s manifests repo URL')
     }
 
     tools {
@@ -62,7 +24,6 @@ pipeline {
     environment {
         SONAR_SERVER_ENV = 'sonar-server'
         NEXUS_CREDS_ID   = 'nexus-creds'
-        GITHUB_CREDS     = 'github-creds'
 
         AWS_REGION   = 'ap-south-1'
         ECR_REGISTRY = '835505308472.dkr.ecr.ap-south-1.amazonaws.com'
@@ -73,7 +34,6 @@ pipeline {
     }
 
     stages {
-
         stage('Checkout Code') {
             steps {
                 echo "Stage 1: Fetching source from branch: ${params.GIT_BRANCH}..."
@@ -189,32 +149,16 @@ pipeline {
 
         stage('Update Helm Values') {
             steps {
-                withCredentials([
-                    usernamePassword(
-                        credentialsId: "${env.GITHUB_CREDS}",
-                        usernameVariable: 'GIT_USER',
-                        passwordVariable: 'GIT_TOKEN'
-                    )
-                ]) {
-                    sh """
-                        rm -rf hariprasad-k8s-manifests
-                        git clone https://\$GIT_USER:\$GIT_TOKEN@://github.com
-                        cd hariprasad-k8s-manifests
-                        sed -i 's|tag:.*|tag: "${BUILD_NUMBER}"|' values.yaml
-                        echo "Updated values.yaml:"
-                        cat hariprasad-chart/values.yaml
+                sh """
+                    rm -rf hariprasad-k8s-manifests
+                    git clone https://github.com
+                    cd hariprasad-k8s-manifests
 
-                        git config user.email "jenkins@ci.com"
-                        git config user.name "Jenkins CI"
+                    sed -i 's|tag:.*|tag: "${BUILD_NUMBER}"|' values.yaml
 
-                        git add hariprasad-chart/values.yaml
-                        git commit -m "ci: update image tag to build-${BUILD_NUMBER}"
-
-                        git push origin main
-                    """
-                }
-
-                echo "Helm values updated → ArgoCD deploying build ${BUILD_NUMBER}"
+                    echo "Updated values.yaml content:"
+                    cat values.yaml
+                """
             }
         }
     }
