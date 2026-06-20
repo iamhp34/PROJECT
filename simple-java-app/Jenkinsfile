@@ -149,16 +149,34 @@ pipeline {
 
         stage('Update Helm Values') {
             steps {
-                sh """
-                    rm -rf hariprasad-k8s-manifests
-                    git clone https://github.com
-                    cd hariprasad-k8s-manifests
+                withCredentials([
+                    usernamePassword(
+                        credentialsId: 'github-creds',
+                        usernameVariable: 'GIT_USER',
+                        passwordVariable: 'GIT_TOKEN'
+                    )
+                ]) {
+                    sh """
+                        rm -rf hariprasad-k8s-manifests
 
-                    sed -i 's|tag:.*|tag: "${BUILD_NUMBER}"|' values.yaml
+                        git clone https://\${GIT_USER}:\${GIT_TOKEN}@github.com/iamhp34/hariprasad-k8s-manifests.git
 
-                    echo "Updated values.yaml content:"
-                    cat values.yaml
-                """
+                        cd hariprasad-k8s-manifests
+
+                        sed -i 's|tag:.*|tag: "${BUILD_NUMBER}"|' values.yaml
+
+                        echo "Updated values.yaml:"
+                        cat values.yaml
+
+                        git config user.email "jenkins@ci.com"
+                        git config user.name "Jenkins CI"
+
+                        git add values.yaml
+                        git commit -m "ci: update image tag to build-${BUILD_NUMBER}"
+
+                        git push https://\${GIT_USER}:\${GIT_TOKEN}@github.com/iamhp34/hariprasad-k8s-manifests.git main
+                    """
+                }
             }
         }
     }
