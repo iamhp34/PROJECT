@@ -4,7 +4,7 @@ pipeline {
     parameters {
         string(name: 'GIT_BRANCH',      defaultValue: 'main',
                description: 'Source code branch')
-        string(name: 'GIT_REPO_URL',    defaultValue: 'https://github.com',
+        string(name: 'GIT_REPO_URL',    defaultValue: 'https://github.com/iamhp34/PROJECT.git',
                description: 'App source repo')
         string(name: 'APP_DIRECTORY',   defaultValue: 'simple-java-app',
                description: 'Java app folder')
@@ -19,7 +19,7 @@ pipeline {
         string(name: 'MAVEN_GROUP_ID',  defaultValue: 'com/example',
                description: 'Maven group path')
 
-        string(name: 'MANIFESTS_REPO',  defaultValue: 'https://github.com',
+        string(name: 'MANIFESTS_REPO',  defaultValue: 'https://github.com/iamhp34/hariprasad-k8s-manifests.git',
                description: 'K8s manifests repo URL')
     }
 
@@ -42,10 +42,12 @@ pipeline {
     }
 
     stages {
+
         stage('Checkout Code') {
             steps {
                 echo "Stage 1: Fetching source from branch: ${params.GIT_BRANCH}..."
-                git branch: "${params.GIT_BRANCH}", url: "${params.GIT_REPO_URL}"
+                git branch: "${params.GIT_BRANCH}",
+                    url:    "${params.GIT_REPO_URL}"
             }
         }
 
@@ -64,7 +66,10 @@ pipeline {
                 dir("${params.APP_DIRECTORY}") {
                     echo "Stage 3: Running SonarQube analysis..."
                     withSonarQubeEnv("${env.SONAR_SERVER_ENV}") {
-                        sh "mvn sonar:sonar -Dsonar.host.url=http://${params.SONAR_IP_PORT}"
+                        sh """
+                            mvn sonar:sonar \
+                                -Dsonar.host.url=http://${params.SONAR_IP_PORT}
+                        """
                     }
                 }
                 timeout(time: 10, unit: 'MINUTES') {
@@ -104,7 +109,6 @@ pipeline {
             steps {
                 dir("${params.APP_DIRECTORY}") {
                     echo "Stage 5: Building Docker image..."
-                    // Dynamically binds your configured "latest" UI tool binary to this block
                     withEnv(["PATH+DOCKER=${tool name: 'latest', type: 'org.jenkinsci.plugins.docker.commons.tools.DockerTool'}/bin"]) {
                         sh """
                             docker build \
@@ -122,10 +126,8 @@ pipeline {
         stage('Push to ECR') {
             steps {
                 echo "Stage 6: Pushing image to ECR..."
-                // Dynamically binds your configured "latest" UI tool binary to this block
                 withEnv(["PATH+DOCKER=${tool name: 'latest', type: 'org.jenkinsci.plugins.docker.commons.tools.DockerTool'}/bin"]) {
                     sh """
-                        # Authenticate against ECR using your host worker node's engine socket
                         aws ecr get-login-password --region ${env.AWS_REGION} | \
                             docker login \
                                 --username AWS \
@@ -134,7 +136,6 @@ pipeline {
                         docker push ${env.FULL_IMAGE}
                         docker push ${env.ECR_REGISTRY}/${env.ECR_REPO}:latest
 
-                        # Clean up local cache layers to save storage space on worker node
                         docker rmi ${env.FULL_IMAGE} || true
                         docker rmi ${env.ECR_REGISTRY}/${env.ECR_REPO}:latest || true
                     """
@@ -152,7 +153,7 @@ pipeline {
                 )]) {
                     sh """
                         rm -rf hariprasad-k8s-manifests
-                        git clone https://\$GIT_USER:\$GIT_TOKEN@://github.com
+                        git clone https://\$GIT_USER:\$GIT_TOKEN@github.com/iamhp34/hariprasad-k8s-manifests.git
                         cd hariprasad-k8s-manifests
 
                         sed -i 's|tag:.*|tag: "${BUILD_NUMBER}"|' hariprasad-chart/values.yaml
