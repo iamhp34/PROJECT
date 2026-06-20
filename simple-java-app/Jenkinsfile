@@ -4,7 +4,7 @@ pipeline {
     parameters {
         string(name: 'GIT_BRANCH',      defaultValue: 'main',
                description: 'Source code branch')
-        string(name: 'GIT_REPO_URL',    defaultValue: 'https://github.com/iamhp34/PROJECT.git',
+        string(name: 'GIT_REPO_URL',    defaultValue: 'https://github.com',
                description: 'App source repo')
         string(name: 'APP_DIRECTORY',   defaultValue: 'simple-java-app',
                description: 'Java app folder')
@@ -19,7 +19,7 @@ pipeline {
         string(name: 'MAVEN_GROUP_ID',  defaultValue: 'com/example',
                description: 'Maven group path')
 
-        string(name: 'MANIFESTS_REPO',  defaultValue: 'https://github.com/iamhp34/hariprasad-k8s-manifests.git',
+        string(name: 'MANIFESTS_REPO',  defaultValue: 'https://github.com',
                description: 'K8s manifests repo URL')
     }
 
@@ -109,10 +109,14 @@ pipeline {
             steps {
                 dir("${params.APP_DIRECTORY}") {
                     echo "Stage 5: Building Docker image..."
-                    withEnv(["PATH+DOCKER=${tool name: 'latest', type: 'org.jenkinsci.plugins.docker.commons.tools.DockerTool'}/bin"]) {
+                    script {
+                        // Safely resolve your UI tool path via Groovy variables instead of withEnv macros
+                        def dockerToolHome = tool name: 'latest', type: 'org.jenkinsci.plugins.docker.commons.tools.DockerTool'
                         sh """
+                            export PATH="\$PATH:${dockerToolHome}/bin"
+                            
                             docker build \
-                                --build-arg BUILD_NUMBER=${BUILD_NUMBER} \
+                                --build-arg BUILD_NUMBER=${env.BUILD_NUMBER} \
                                 -t ${env.FULL_IMAGE} \
                                 -t ${env.ECR_REGISTRY}/${env.ECR_REPO}:latest \
                                 .
@@ -126,8 +130,11 @@ pipeline {
         stage('Push to ECR') {
             steps {
                 echo "Stage 6: Pushing image to ECR..."
-                withEnv(["PATH+DOCKER=${tool name: 'latest', type: 'org.jenkinsci.plugins.docker.commons.tools.DockerTool'}/bin"]) {
+                script {
+                    def dockerToolHome = tool name: 'latest', type: 'org.jenkinsci.plugins.docker.commons.tools.DockerTool'
                     sh """
+                        export PATH="\$PATH:${dockerToolHome}/bin"
+
                         aws ecr get-login-password --region ${env.AWS_REGION} | \
                             docker login \
                                 --username AWS \
@@ -153,7 +160,7 @@ pipeline {
                 )]) {
                     sh """
                         rm -rf hariprasad-k8s-manifests
-                        git clone https://\$GIT_USER:\$GIT_TOKEN@github.com/iamhp34/hariprasad-k8s-manifests.git
+                        git clone https://\$GIT_USER:\$GIT_TOKEN@://github.com
                         cd hariprasad-k8s-manifests
 
                         sed -i 's|tag:.*|tag: "${BUILD_NUMBER}"|' hariprasad-chart/values.yaml
